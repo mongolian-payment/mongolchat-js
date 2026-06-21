@@ -1,14 +1,22 @@
 # @mongolian-payment/mongolchat
 
-MongolChat payment SDK for Node.js -- QR payments and webhook handling.
+MongolChat payment SDK for Node.js — generate online QR payments and check their status.
+
+[![npm version](https://img.shields.io/npm/v/@mongolian-payment/mongolchat.svg)](https://www.npmjs.com/package/@mongolian-payment/mongolchat)
+[![license](https://img.shields.io/npm/l/@mongolian-payment/mongolchat.svg)](./LICENSE)
+
+> Part of the **[mongolian-payment](https://github.com/mongolian-payment)** SDK suite.
+> Also available for Python: **[mongolian-payment-mongolchat](https://pypi.org/project/mongolian-payment-mongolchat/)** ([source](https://github.com/mongolian-payment/mongolchat-py)).
+
+## Requirements
+
+- Node.js >= 18.0.0 (uses native `fetch`)
 
 ## Installation
 
 ```bash
 npm install @mongolian-payment/mongolchat
 ```
-
-Requires Node.js >= 18.0.0 (uses native `fetch`).
 
 ## Quick Start
 
@@ -17,9 +25,9 @@ import { MongolChatClient } from "@mongolian-payment/mongolchat";
 
 const client = new MongolChatClient({
   endpoint: "https://api.mongolchat.mn",
-  apiKey: "your-api-key",
-  workerKey: "your-worker-key",
-  appSecret: "your-app-secret",
+  apiKey: "YOUR_API_KEY",
+  workerKey: "YOUR_WORKER_KEY",
+  appSecret: "YOUR_APP_SECRET",
   branchNo: "001",
 });
 
@@ -40,80 +48,55 @@ const qr = await client.generateQr({
 
 console.log(qr.qr); // The QR code string
 
-// Check QR payment status
+// Check payment status
 const status = await client.checkQr(qr.qr);
-console.log(status.status); // "PAID", "PENDING", etc.
+console.log(status.status); // e.g. "PAID", "PENDING"
 ```
 
-## Configuration
-
-### Direct
+## Configuration from Environment Variables
 
 ```typescript
-const client = new MongolChatClient({
-  endpoint: "https://api.mongolchat.mn",
-  apiKey: "your-api-key",
-  workerKey: "your-worker-key",
-  appSecret: "your-app-secret",
-  branchNo: "001",
+import { MongolChatClient, loadConfigFromEnv } from "@mongolian-payment/mongolchat";
+
+const client = new MongolChatClient(loadConfigFromEnv());
+```
+
+| Variable                | Description                                  |
+| ----------------------- | -------------------------------------------- |
+| `MONGOLCHAT_ENDPOINT`   | MongolChat API base URL                      |
+| `MONGOLCHAT_API_KEY`    | API key for the `api-key` header             |
+| `MONGOLCHAT_WORKER_KEY` | Worker key for the `Authorization` header    |
+| `MONGOLCHAT_APP_SECRET` | Application secret                           |
+| `MONGOLCHAT_BRANCH_NO`  | Branch number                                |
+
+> Never hard-code credentials — load them from the environment or a secrets vault.
+
+## API Reference
+
+| Method | Description |
+|--------|-------------|
+| `generateQr(input)` | Generate an online QR code → `{ qr, code, message }` |
+| `checkQr(qr)` | Check payment status for a QR code → `{ status, code, message, id, who_paid, user_ref_id }` |
+
+```typescript
+const qr = await client.generateQr({
+  amount: 5000,
+  products: [{ product_name: "Coffee", quantity: "1", price: 5000, tag: "food" }],
+  title: "Coffee Shop",
+  subTitle: "Order #123",
+  noat: "123456",
+  nhat: "654321",
+  ttd: "789",
+  referenceNumber: "REF-001",
+  expireTime: "2026-12-31T23:59:59",
+  branchId: "002", // optional branch override
 });
+
+const status = await client.checkQr(qr.qr);
+console.log(status.status, status.who_paid, status.user_ref_id);
 ```
 
-### From Environment Variables
-
-```typescript
-import { loadConfigFromEnv, MongolChatClient } from "@mongolian-payment/mongolchat";
-
-const config = loadConfigFromEnv();
-const client = new MongolChatClient(config);
-```
-
-| Environment Variable     | Config Field |
-| ------------------------ | ------------ |
-| `MONGOLCHAT_ENDPOINT`    | endpoint     |
-| `MONGOLCHAT_API_KEY`     | apiKey       |
-| `MONGOLCHAT_WORKER_KEY`  | workerKey    |
-| `MONGOLCHAT_APP_SECRET`  | appSecret    |
-| `MONGOLCHAT_BRANCH_NO`   | branchNo     |
-
-## API
-
-### `client.generateQr(input)`
-
-Generate an online QR code for payment.
-
-**Parameters:**
-
-| Field           | Type            | Required | Description                |
-| --------------- | --------------- | -------- | -------------------------- |
-| amount          | number          | Yes      | Payment amount in MNT      |
-| products        | MchatProduct[]  | Yes      | List of products           |
-| title           | string          | Yes      | Payment title              |
-| subTitle        | string          | Yes      | Payment subtitle           |
-| noat            | string          | Yes      | NOAT (VAT) number          |
-| nhat            | string          | Yes      | NHAT number                |
-| ttd             | string          | Yes      | TTD number                 |
-| referenceNumber | string          | Yes      | Unique reference number    |
-| expireTime      | string          | Yes      | QR expiration time         |
-| branchId        | string          | No       | Branch ID override         |
-
-**Returns:** `MchatOnlineQrGenerateResponse` with `qr`, `code`, and `message`.
-
-### `client.checkQr(qr)`
-
-Check the payment status of a QR code.
-
-**Parameters:**
-
-| Field | Type   | Required | Description                      |
-| ----- | ------ | -------- | -------------------------------- |
-| qr    | string | Yes      | QR code string from generateQr   |
-
-**Returns:** `MchatOnlineQrCheckResponse` with `status`, `code`, `message`, `id`, `who_paid`, and `user_ref_id`.
-
-## Webhook Types
-
-The SDK exports TypeScript types for handling MongolChat webhooks:
+The SDK also exports TypeScript types for handling MongolChat webhooks:
 
 ```typescript
 import type {
@@ -126,7 +109,9 @@ import type {
 
 ## Error Handling
 
-All API errors throw a `MongolChatError`:
+All API errors throw `MongolChatError`, which includes the API response code and raw
+response body. The MongolChat API uses code `1000` for success — any other code is
+treated as an error:
 
 ```typescript
 import { MongolChatError } from "@mongolian-payment/mongolchat";
@@ -135,14 +120,12 @@ try {
   await client.generateQr(input);
 } catch (err) {
   if (err instanceof MongolChatError) {
-    console.error(err.message); // "MongolChat error (2001): Invalid amount"
-    console.error(err.code);    // 2001
-    console.error(err.response); // Raw response object
+    console.error(err.message);  // "MongolChat error (2001): Invalid amount"
+    console.error(err.code);     // API response code (e.g. 2001)
+    console.error(err.response); // Raw response body
   }
 }
 ```
-
-The MongolChat API uses code `1000` for success. Any other code is treated as an error.
 
 ## License
 
